@@ -27,6 +27,7 @@ const INTERNAL_AUTH_SESSION_HOURS = Number(process.env.INTERNAL_AUTH_SESSION_HOU
 const CRM_SYNC_URL = process.env.CRM_SYNC_URL || '';
 const CRM_SYNC_TOKEN = process.env.CRM_SYNC_TOKEN || '';
 const CRM_SYNC_TIMEOUT_MS = Number(process.env.CRM_SYNC_TIMEOUT_MS || 8000);
+const SAAS_PUBLIC_URL = APP_BASE_URL;
 
 const DEFAULT_PLAN_CATALOG = {
   'b2c-hunter': {
@@ -487,7 +488,7 @@ const buildDashboardHtml = (snapshot, user) => {
   <script>
     document.getElementById('logout-btn').addEventListener('click', async () => {
       await fetch('/api/internal/auth/logout', { method: 'POST' });
-      window.location.href = '/internal/login';
+      window.location.href = '${SAAS_PUBLIC_URL}';
     });
   </script>
 </body>
@@ -508,6 +509,7 @@ const buildInternalLoginHtml = () => `<!DOCTYPE html>
     label { display: block; font-size: 13px; color: #cbd5e1; margin-bottom: 6px; }
     input { width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid #334155; background: #020617; color: #e2e8f0; padding: 10px 12px; margin-bottom: 14px; }
     button { width: 100%; border: 0; border-radius: 8px; background: #00d4ff; color: #052033; font-weight: 700; padding: 10px 12px; cursor: pointer; }
+    .btn-secondary { width: 100%; border: 1px solid #334155; border-radius: 8px; background: transparent; color: #e2e8f0; font-weight: 700; padding: 10px 12px; cursor: pointer; margin-top: 8px; }
     .error { margin-top: 10px; color: #fb7185; font-size: 13px; min-height: 18px; }
   </style>
 </head>
@@ -521,6 +523,7 @@ const buildInternalLoginHtml = () => `<!DOCTYPE html>
       <label for="password">Senha</label>
       <input id="password" name="password" type="password" autocomplete="current-password" required />
       <button type="submit">Entrar</button>
+      <button type="button" id="leave-login" class="btn-secondary">Sair</button>
       <div class="error" id="error-message"></div>
     </form>
   </div>
@@ -550,6 +553,11 @@ const buildInternalLoginHtml = () => `<!DOCTYPE html>
       }
 
       window.location.href = '/internal/payments';
+    });
+
+    document.getElementById('leave-login').addEventListener('click', async () => {
+      await fetch('/api/internal/auth/logout', { method: 'POST' });
+      window.location.href = '${SAAS_PUBLIC_URL}';
     });
   </script>
 </body>
@@ -1119,9 +1127,12 @@ app.post('/api/internal/auth/login', (req, res) => {
   });
 });
 
-app.post('/api/internal/auth/logout', requireInternalAccess(), (req, res) => {
-  if (req.internalUser?.sessionToken) {
-    internalSessions.delete(req.internalUser.sessionToken);
+app.post('/api/internal/auth/logout', (req, res) => {
+  const cookies = parseCookies(req.get('cookie') || '');
+  const sessionToken = cookies[INTERNAL_SESSION_COOKIE];
+
+  if (sessionToken) {
+    internalSessions.delete(sessionToken);
   }
 
   res.setHeader('Set-Cookie', createCookieHeader('', { maxAge: 0 }));
