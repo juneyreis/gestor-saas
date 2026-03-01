@@ -28,6 +28,41 @@ const CRM_SYNC_URL = process.env.CRM_SYNC_URL || '';
 const CRM_SYNC_TOKEN = process.env.CRM_SYNC_TOKEN || '';
 const CRM_SYNC_TIMEOUT_MS = Number(process.env.CRM_SYNC_TIMEOUT_MS || 8000);
 
+const DEFAULT_PLAN_CATALOG = {
+  'b2c-hunter': {
+    id: 'b2c-hunter',
+    name: 'Hunter Pro',
+    unitPrice: 49,
+    currency: 'BRL',
+    active: true,
+    buttonText: 'Assinar Pro',
+  },
+  'b2c-elite': {
+    id: 'b2c-elite',
+    name: 'Elite',
+    unitPrice: 99,
+    currency: 'BRL',
+    active: true,
+    buttonText: 'Assinar Elite',
+  },
+  'b2b-squad': {
+    id: 'b2b-squad',
+    name: 'Squad',
+    unitPrice: 490,
+    currency: 'BRL',
+    active: true,
+    buttonText: 'Teste Grátis',
+  },
+  'b2b-field': {
+    id: 'b2b-field',
+    name: 'Field Ops',
+    unitPrice: 1200,
+    currency: 'BRL',
+    active: true,
+    buttonText: 'Falar com Vendas',
+  },
+};
+
 const INTERNAL_SESSION_COOKIE = 'saas_internal_session';
 const internalSessions = new Map();
 
@@ -75,6 +110,7 @@ const createEmptyDatabase = () => ({
   payments: {},
   webhooks: [],
   crmSyncHistory: [],
+  planCatalog: DEFAULT_PLAN_CATALOG,
   updatedAt: new Date().toISOString(),
 });
 
@@ -101,6 +137,7 @@ const readDatabase = async () => {
       payments: inMemoryDatabase.payments && typeof inMemoryDatabase.payments === 'object' ? inMemoryDatabase.payments : {},
       webhooks: Array.isArray(inMemoryDatabase.webhooks) ? inMemoryDatabase.webhooks : [],
       crmSyncHistory: Array.isArray(inMemoryDatabase.crmSyncHistory) ? inMemoryDatabase.crmSyncHistory : [],
+      planCatalog: inMemoryDatabase.planCatalog && typeof inMemoryDatabase.planCatalog === 'object' ? inMemoryDatabase.planCatalog : DEFAULT_PLAN_CATALOG,
       updatedAt: inMemoryDatabase.updatedAt || new Date().toISOString(),
     };
   }
@@ -115,6 +152,7 @@ const readDatabase = async () => {
       payments: parsed.payments && typeof parsed.payments === 'object' ? parsed.payments : {},
       webhooks: Array.isArray(parsed.webhooks) ? parsed.webhooks : [],
       crmSyncHistory: Array.isArray(parsed.crmSyncHistory) ? parsed.crmSyncHistory : [],
+      planCatalog: parsed.planCatalog && typeof parsed.planCatalog === 'object' ? parsed.planCatalog : DEFAULT_PLAN_CATALOG,
       updatedAt: parsed.updatedAt || new Date().toISOString(),
     };
   } catch {
@@ -188,6 +226,71 @@ const hasProcessedSyncKey = async (syncKey) => {
   if (!syncKey) return false;
   const db = await readDatabase();
   return db.crmSyncHistory.some((item) => item.syncKey === syncKey && item.status === 'success');
+};
+
+const sanitizePlanRecord = (input, fallbackId = '') => {
+  const normalizedId = (input?.id || fallbackId || '').toString().trim().toLowerCase();
+  const normalizedName = (input?.name || '').toString().trim();
+  const parsedPrice = Number(input?.unitPrice);
+  const normalizedButtonText = (input?.buttonText || '').toString().trim();
+
+  if (!normalizedId || !normalizedName || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+    return null;
+  }
+
+  return {
+    id: normalizedId,
+    name: normalizedName,
+    unitPrice: parsedPrice,
+    currency: 'BRL',
+    active: input?.active !== false,
+    buttonText: normalizedButtonText || 'Assinar',
+    updatedAt: new Date().toISOString(),
+  };
+};
+
+const getPlanCatalog = async () => {
+  const db = await readDatabase();
+  return db.planCatalog || DEFAULT_PLAN_CATALOG;
+};
+
+const getPlanCatalogEntries = async ({ includeInactive = true } = {}) => {
+  const catalog = await getPlanCatalog();
+  const plans = Object.values(catalog || {});
+  return includeInactive ? plans : plans.filter((plan) => plan.active !== false);
+};
+
+const getCatalogPlanById = async (planId) => {
+  const catalog = await getPlanCatalog();
+  return catalog?.[planId] || null;
+};
+
+const savePlanCatalogRecord = async (planInput, fallbackId = '') => {
+  const normalized = sanitizePlanRecord(planInput, fallbackId);
+  if (!normalized) {
+    return { ok: false, reason: 'invalid-plan-payload' };
+  }
+
+  const db = await readDatabase();
+  db.planCatalog = db.planCatalog && typeof db.planCatalog === 'object' ? db.planCatalog : { ...DEFAULT_PLAN_CATALOG };
+  db.planCatalog[normalized.id] = {
+    ...(db.planCatalog[normalized.id] || {}),
+    ...normalized,
+  };
+
+  await writeDatabase(db);
+  return { ok: true, plan: db.planCatalog[normalized.id] };
+};
+
+const deletePlanCatalogRecord = async (planId) => {
+  const db = await readDatabase();
+  if (!db.planCatalog || !db.planCatalog[planId]) {
+    return { ok: false, reason: 'not-found' };
+  }
+
+  delete db.planCatalog[planId];
+  await writeDatabase(db);
+  return { ok: true };
 };
 
 const parseCookies = (cookieHeader) => {
@@ -327,6 +430,7 @@ const buildDashboardHtml = (snapshot, user) => {
     .small { color: #94a3b8; font-size: 12px; }
     .header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
     .logout { border: 0; background: #0ea5e9; color: #082f49; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600; }
+    .nav-btn { border: 1px solid #334155; background: transparent; color: #cbd5e1; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600; text-decoration: none; margin-right: 8px; }
   </style>
 </head>
 <body>
@@ -334,6 +438,7 @@ const buildDashboardHtml = (snapshot, user) => {
     <h1>Painel Interno de Pagamentos</h1>
     <div>
       <span class="small">Usuário: ${user?.username || '-'} (${user?.role || '-'})</span>
+      ${user?.role === 'admin' ? '<a class="nav-btn" href="/internal/plans">Gerenciar planos</a>' : ''}
       <button class="logout" id="logout-btn" type="button">Sair</button>
     </div>
   </div>
@@ -449,6 +554,191 @@ const buildInternalLoginHtml = () => `<!DOCTYPE html>
   </script>
 </body>
 </html>`;
+
+const buildPlansAdminHtml = (plans, user) => {
+  const rows = plans
+    .map(
+      (plan) => `<tr>
+        <td>${plan.id}</td>
+        <td>${plan.name}</td>
+        <td>R$ ${plan.unitPrice}</td>
+        <td>${plan.buttonText || 'Assinar'}</td>
+        <td>${plan.active === false ? 'Inativo' : 'Ativo'}</td>
+        <td>
+          <button type="button" class="btn" onclick="editPlan('${plan.id}')">Editar</button>
+          <button type="button" class="btn danger" onclick="deletePlan('${plan.id}')">Excluir</button>
+        </td>
+      </tr>`
+    )
+    .join('');
+
+  const plansJson = JSON.stringify(plans || []);
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Planos</title>
+  <style>
+    body { font-family: Inter, Arial, sans-serif; background: #0b1220; color: #e2e8f0; margin: 0; padding: 24px; }
+    h1, h2 { margin: 0 0 12px 0; }
+    .meta { color: #94a3b8; margin-bottom: 20px; }
+    .header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; align-items: center; }
+    .card { background: #111827; border: 1px solid #334155; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid #1e293b; padding: 10px; text-align: left; }
+    th { color: #7dd3fc; font-weight: 600; }
+    input, select { width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid #334155; background: #020617; color: #e2e8f0; padding: 10px; margin-bottom: 10px; }
+    .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+    .btn { border: 0; background: #0ea5e9; color: #082f49; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 700; margin-right: 6px; }
+    .btn.secondary { background: #334155; color: #e2e8f0; }
+    .btn.danger { background: #ef4444; color: #fff; }
+    .small { color: #94a3b8; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h1>Gerenciar Planos do SaaS</h1>
+      <div class="meta">Usuário: ${user?.username || '-'} (${user?.role || '-'})</div>
+    </div>
+    <div>
+      <a class="btn secondary" href="/internal/payments">Voltar ao painel</a>
+      <button class="btn" id="logout-btn" type="button">Sair</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Criar / editar plano</h2>
+    <form id="plan-form">
+      <div class="grid">
+        <div>
+          <label>ID do plano</label>
+          <input id="plan-id" placeholder="ex: b2c-hunter" required />
+        </div>
+        <div>
+          <label>Nome</label>
+          <input id="plan-name" placeholder="ex: Hunter Pro" required />
+        </div>
+        <div>
+          <label>Valor (R$)</label>
+          <input id="plan-price" type="number" min="1" step="0.01" required />
+        </div>
+        <div>
+          <label>Texto do botão</label>
+          <input id="plan-button" placeholder="ex: Assinar Pro" required />
+        </div>
+        <div>
+          <label>Status</label>
+          <select id="plan-active">
+            <option value="true">Ativo</option>
+            <option value="false">Inativo</option>
+          </select>
+        </div>
+      </div>
+      <button class="btn" type="submit">Salvar plano</button>
+      <button class="btn secondary" type="button" id="reset-form">Limpar</button>
+      <div class="small" id="form-message"></div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Planos cadastrados</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nome</th>
+          <th>Valor</th>
+          <th>Botão</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows || '<tr><td colspan="6">Nenhum plano cadastrado.</td></tr>'}
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const plans = ${plansJson};
+    const form = document.getElementById('plan-form');
+    const message = document.getElementById('form-message');
+
+    const resetForm = () => {
+      document.getElementById('plan-id').value = '';
+      document.getElementById('plan-name').value = '';
+      document.getElementById('plan-price').value = '';
+      document.getElementById('plan-button').value = '';
+      document.getElementById('plan-active').value = 'true';
+    };
+
+    const editPlan = (planId) => {
+      const plan = plans.find((item) => item.id === planId);
+      if (!plan) return;
+      document.getElementById('plan-id').value = plan.id || '';
+      document.getElementById('plan-name').value = plan.name || '';
+      document.getElementById('plan-price').value = plan.unitPrice || '';
+      document.getElementById('plan-button').value = plan.buttonText || '';
+      document.getElementById('plan-active').value = plan.active === false ? 'false' : 'true';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const deletePlan = async (planId) => {
+      const confirmed = window.confirm('Deseja excluir o plano ' + planId + '?');
+      if (!confirmed) return;
+
+      const response = await fetch('/api/internal/plans/' + encodeURIComponent(planId), { method: 'DELETE' });
+      if (!response.ok) {
+        message.textContent = 'Falha ao excluir plano.';
+        return;
+      }
+
+      window.location.reload();
+    };
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      message.textContent = '';
+
+      const payload = {
+        id: document.getElementById('plan-id').value,
+        name: document.getElementById('plan-name').value,
+        unitPrice: Number(document.getElementById('plan-price').value),
+        buttonText: document.getElementById('plan-button').value,
+        active: document.getElementById('plan-active').value === 'true',
+      };
+
+      const response = await fetch('/api/internal/plans/' + encodeURIComponent(payload.id), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        message.textContent = data.message || 'Falha ao salvar plano.';
+        return;
+      }
+
+      message.textContent = 'Plano salvo com sucesso.';
+      window.location.reload();
+    });
+
+    document.getElementById('reset-form').addEventListener('click', resetForm);
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+      await fetch('/api/internal/auth/logout', { method: 'POST' });
+      window.location.href = '/internal/login';
+    });
+
+    window.editPlan = editPlan;
+    window.deletePlan = deletePlan;
+  </script>
+</body>
+</html>`;
+};
 
 const getDashboardSnapshot = async () => {
   const db = await readDatabase();
@@ -842,6 +1132,47 @@ app.get('/api/internal/auth/me', requireInternalAccess(), (req, res) => {
   return res.status(200).json({ ok: true, user: req.internalUser });
 });
 
+app.get('/api/public/plans', async (_req, res) => {
+  const plans = await getPlanCatalogEntries({ includeInactive: false });
+  return res.status(200).json({ ok: true, plans });
+});
+
+app.get('/api/internal/plans', requireInternalAccess(['admin']), async (_req, res) => {
+  const plans = await getPlanCatalogEntries({ includeInactive: true });
+  return res.status(200).json({ ok: true, plans });
+});
+
+app.get('/internal/plans', requireInternalAccess(['admin']), async (req, res) => {
+  const plans = await getPlanCatalogEntries({ includeInactive: true });
+  return res.status(200).send(buildPlansAdminHtml(plans, req.internalUser));
+});
+
+app.post('/api/internal/plans', requireInternalAccess(['admin']), async (req, res) => {
+  const result = await savePlanCatalogRecord(req.body || {});
+  if (!result.ok) {
+    return res.status(400).json({ ok: false, message: 'Payload de plano inválido.' });
+  }
+  return res.status(201).json({ ok: true, plan: result.plan });
+});
+
+app.put('/api/internal/plans/:id', requireInternalAccess(['admin']), async (req, res) => {
+  const planId = (req.params.id || '').toString().trim().toLowerCase();
+  const result = await savePlanCatalogRecord({ ...(req.body || {}), id: planId }, planId);
+  if (!result.ok) {
+    return res.status(400).json({ ok: false, message: 'Payload de plano inválido.' });
+  }
+  return res.status(200).json({ ok: true, plan: result.plan });
+});
+
+app.delete('/api/internal/plans/:id', requireInternalAccess(['admin']), async (req, res) => {
+  const planId = (req.params.id || '').toString().trim().toLowerCase();
+  const result = await deletePlanCatalogRecord(planId);
+  if (!result.ok) {
+    return res.status(404).json({ ok: false, message: 'Plano não encontrado.' });
+  }
+  return res.status(200).json({ ok: true });
+});
+
 app.post('/api/mercadopago/create-preference', async (req, res) => {
   try {
     if (!ACCESS_TOKEN) {
@@ -851,16 +1182,24 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
       });
     }
 
-    const { planId, title, unitPrice, quantity = 1, payerEmail } = req.body || {};
+    const { planId, quantity = 1, payerEmail } = req.body || {};
 
-    if (!planId || !title || !unitPrice) {
+    if (!planId) {
       return res.status(400).json({
         ok: false,
-        message: 'Campos obrigatórios: planId, title, unitPrice.',
+        message: 'Campo obrigatório: planId.',
       });
     }
 
-    const parsedUnitPrice = Number(unitPrice);
+    const catalogPlan = await getCatalogPlanById(planId);
+    if (!catalogPlan || catalogPlan.active === false) {
+      return res.status(400).json({
+        ok: false,
+        message: 'Plano inválido ou indisponível para checkout.',
+      });
+    }
+
+    const parsedUnitPrice = Number(catalogPlan.unitPrice);
     const parsedQuantity = Number(quantity);
 
     if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0) {
@@ -881,9 +1220,9 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
       items: [
         {
           id: planId,
-          title,
+          title: `${catalogPlan.name} - Gestor CRM`,
           quantity: parsedQuantity,
-          currency_id: 'BRL',
+          currency_id: catalogPlan.currency || 'BRL',
           unit_price: parsedUnitPrice,
         },
       ],
@@ -923,7 +1262,7 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
     await saveCheckoutRecord({
       createdAt: new Date().toISOString(),
       planId,
-      title,
+      title: `${catalogPlan.name} - Gestor CRM`,
       quantity: parsedQuantity,
       unitPrice: parsedUnitPrice,
       preferenceId: data.id || '',

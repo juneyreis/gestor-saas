@@ -54,14 +54,32 @@ Pré-requisito: Node.js 18+
    - Logout do painel interno.
 - `GET /api/internal/auth/me`
    - Dados do usuário autenticado.
+- `GET /api/public/plans`
+   - Lista planos ativos para exibição no SaaS.
+- `GET /api/internal/plans`
+   - Lista catálogo completo de planos (somente admin).
+- `POST /api/internal/plans`
+   - Cria plano no catálogo (somente admin).
+- `PUT /api/internal/plans/:id`
+   - Atualiza plano no catálogo (somente admin).
+- `DELETE /api/internal/plans/:id`
+   - Remove plano do catálogo (somente admin).
 - `GET /api/internal/payments`
    - Retorna snapshot JSON dos pagamentos/eventos (acesso protegido por perfil).
 - `GET /internal/login`
    - Tela de login do painel interno.
 - `GET /internal/payments`
    - Painel interno HTML de status dos pagamentos (acesso protegido por sessão).
+- `GET /internal/plans`
+   - Tela interna de CRUD de planos e valores (somente admin).
 - `GET /api/health`
   - Healthcheck simples do backend.
+
+## Catálogo de planos (admin)
+
+- O checkout usa nome/valor oficiais do backend por `planId`.
+- O frontend não define mais o valor final de cobrança no Mercado Pago.
+- Alterações de nome/valor podem ser feitas em `/internal/plans` por usuário `admin`.
 
 ## Validação de webhook implementada
 

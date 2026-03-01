@@ -1,8 +1,16 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion'; // Using framer-motion for smooth toggle
 import { Check, X } from 'lucide-react';
 import { PlanType, PricingPlan } from '../types';
 import { B2C_PLANS, B2B_PLANS } from '../constants';
+
+interface PublicPlanCatalogItem {
+  id: string;
+  name: string;
+  unitPrice: number;
+  buttonText?: string;
+  active?: boolean;
+}
 
 const PricingCard: React.FC<{
   plan: PricingPlan;
@@ -79,6 +87,93 @@ const Pricing: React.FC = () => {
   const [activeTab, setActiveTab] = useState<PlanType>(PlanType.B2C);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
   const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
+  const [publicPlans, setPublicPlans] = useState<Record<string, PublicPlanCatalogItem>>({});
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadPublicPlans = async () => {
+      try {
+        const response = await fetch('/api/public/plans');
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(data?.plans)) {
+          return;
+        }
+
+        if (!mounted) return;
+
+        const mapped = data.plans.reduce((acc: Record<string, PublicPlanCatalogItem>, item: PublicPlanCatalogItem) => {
+          if (!item?.id) return acc;
+          acc[item.id] = item;
+          return acc;
+        }, {});
+
+        setPublicPlans(mapped);
+        setCatalogLoaded(true);
+      } catch {
+        setCatalogLoaded(true);
+      }
+    };
+
+    loadPublicPlans();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  const mergedB2CPlans = useMemo(
+    () =>
+      B2C_PLANS.map((plan) => {
+        const catalogItem = publicPlans[plan.id];
+        if (!catalogItem) {
+          if (catalogLoaded && plan.checkoutAmount) {
+            return {
+              ...plan,
+              checkoutAmount: undefined,
+              buttonText: 'Indisponível no momento',
+            };
+          }
+          return plan;
+        }
+
+        return {
+          ...plan,
+          name: catalogItem.name || plan.name,
+          buttonText: catalogItem.buttonText || plan.buttonText,
+          checkoutAmount: catalogItem.unitPrice,
+          price: `R$ ${catalogItem.unitPrice}`,
+        };
+      }),
+    [publicPlans, catalogLoaded]
+  );
+
+  const mergedB2BPlans = useMemo(
+    () =>
+      B2B_PLANS.map((plan) => {
+        const catalogItem = publicPlans[plan.id];
+        if (!catalogItem) {
+          if (catalogLoaded && plan.checkoutAmount) {
+            return {
+              ...plan,
+              checkoutAmount: undefined,
+              buttonText: 'Indisponível no momento',
+            };
+          }
+          return plan;
+        }
+
+        return {
+          ...plan,
+          name: catalogItem.name || plan.name,
+          buttonText: catalogItem.buttonText || plan.buttonText,
+          checkoutAmount: catalogItem.unitPrice,
+          price: `R$ ${catalogItem.unitPrice}`,
+        };
+      }),
+    [publicPlans, catalogLoaded]
+  );
 
   const handlePlanAction = async (plan: PricingPlan) => {
     if (!plan.checkoutAmount) {
@@ -106,8 +201,6 @@ const Pricing: React.FC = () => {
         },
         body: JSON.stringify({
           planId: plan.id,
-          title: `${plan.name} - Gestor CRM`,
-          unitPrice: plan.checkoutAmount,
           quantity: 1,
         }),
       });
@@ -184,7 +277,7 @@ const Pricing: React.FC = () => {
                     transition={{ duration: 0.3 }}
                     className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center"
                 >
-                {(activeTab === PlanType.B2C ? B2C_PLANS : B2B_PLANS).map((plan) => (
+                {(activeTab === PlanType.B2C ? mergedB2CPlans : mergedB2BPlans).map((plan) => (
                     <PricingCard 
                       key={plan.id} 
                       plan={plan} 
