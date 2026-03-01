@@ -24,6 +24,7 @@ export interface PricingPlan {
   features: Feature[];
   recommended?: boolean;
   buttonText: string;
+  checkoutAmount?: number;
 }
 
 export interface FeatureCardProps {

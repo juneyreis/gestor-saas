@@ -53,6 +53,7 @@ export const B2C_PLANS: PricingPlan[] = [
       { text: 'Enriquecimento de Dados', included: true },
       { text: 'Funil de Vendas Pessoal', included: true },
     ],
+    checkoutAmount: 49,
   },
   {
     id: 'b2c-elite',
@@ -68,6 +69,7 @@ export const B2C_PLANS: PricingPlan[] = [
       { text: 'Análise de Território', included: true },
       { text: 'Exportação Avançada', included: true },
     ],
+    checkoutAmount: 99,
   },
 ];
 
@@ -86,6 +88,7 @@ export const B2B_PLANS: PricingPlan[] = [
       { text: 'Distribuição de Prospects', included: true },
       { text: 'Tracking em Tempo Real', included: false },
     ],
+    checkoutAmount: 490,
   },
   {
     id: 'b2b-field',
@@ -102,6 +105,7 @@ export const B2B_PLANS: PricingPlan[] = [
       { text: 'Integração CRM (Salesforce/Hubspot)', included: true },
       { text: 'Gamificação de Metas', included: true },
     ],
+    checkoutAmount: 1200,
   },
   {
     id: 'b2b-enterprise',

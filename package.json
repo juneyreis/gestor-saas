@@ -1,14 +1,19 @@
 {
-  "name": "nexus-pipeline",
+  "name": "gestor-saas",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:server": "node server/index.js",
+    "dev:full": "concurrently \"npm run dev:server\" \"npm run dev\"",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "concurrently": "^9.2.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "recharts": "^3.7.0",

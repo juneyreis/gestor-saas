@@ -3,8 +3,13 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { HERO_CHART_DATA } from '../constants';
 import { ArrowRight, Map, Crosshair, Zap } from 'lucide-react';
 
+interface HeroTooltipProps {
+  active?: boolean;
+  payload?: Array<{ value?: number }>;
+  label?: string;
+}
 const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
+const CustomTooltip: React.FC<HeroTooltipProps> = ({ active, payload, label }) => {
     const isProjected = label === 'Nov' || label === 'Dez';
     return (
       <div className="bg-nexus-800 border border-nexus-600 p-3 rounded-lg shadow-xl backdrop-blur-sm">

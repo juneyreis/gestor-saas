@@ -4,7 +4,13 @@ import { Check, X } from 'lucide-react';
 import { PlanType, PricingPlan } from '../types';
 import { B2C_PLANS, B2B_PLANS } from '../constants';
 
-const PricingCard: React.FC<{ plan: PricingPlan; isHovered: boolean; onHover: (planId: string | null) => void }> = ({ plan, isHovered, onHover }) => {
+const PricingCard: React.FC<{
+  plan: PricingPlan;
+  isHovered: boolean;
+  isProcessing: boolean;
+  onHover: (planId: string | null) => void;
+  onSelect: (plan: PricingPlan) => void;
+}> = ({ plan, isHovered, isProcessing, onHover, onSelect }) => {
   const isRecommended = plan.recommended;
   const hasHighlightEffect = isHovered || isRecommended;
 
@@ -54,13 +60,16 @@ const PricingCard: React.FC<{ plan: PricingPlan; isHovered: boolean; onHover: (p
       </ul>
 
       <button
+        type="button"
+        disabled={isProcessing}
+        onClick={() => onSelect(plan)}
         className={`w-full py-3 rounded-lg font-semibold text-sm transition-all duration-200 ${
           hasHighlightEffect
             ? 'bg-nexus-accent text-nexus-900 hover:bg-cyan-300 shadow-lg shadow-cyan-500/20'
             : 'bg-nexus-700 text-white hover:bg-nexus-600'
-        }`}
+        } ${isProcessing ? 'opacity-70 cursor-wait' : ''}`}
       >
-        {plan.buttonText}
+        {isProcessing ? 'Redirecionando...' : plan.buttonText}
       </button>
     </div>
   );
@@ -69,6 +78,54 @@ const PricingCard: React.FC<{ plan: PricingPlan; isHovered: boolean; onHover: (p
 const Pricing: React.FC = () => {
   const [activeTab, setActiveTab] = useState<PlanType>(PlanType.B2C);
   const [hoveredCard, setHoveredCard] = useState<string | null>(null);
+  const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
+
+  const handlePlanAction = async (plan: PricingPlan) => {
+    if (!plan.checkoutAmount) {
+      if (plan.id === 'b2c-scout') {
+        window.open('https://crmgestor.vercel.app/login', '_blank', 'noopener,noreferrer');
+        return;
+      }
+
+      if (plan.id === 'b2b-enterprise') {
+        window.location.href = 'mailto:contato@topteamtecnologia.com?subject=Plano%20Enterprise%20-%20Gestor%20CRM';
+        return;
+      }
+
+      window.location.href = 'mailto:contato@topteamtecnologia.com';
+      return;
+    }
+
+    try {
+      setProcessingPlanId(plan.id);
+
+      const response = await fetch('/api/mercadopago/create-preference', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          planId: plan.id,
+          title: `${plan.name} - Gestor CRM`,
+          unitPrice: plan.checkoutAmount,
+          quantity: 1,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.checkoutUrl) {
+        throw new Error(data?.message || 'Falha ao iniciar checkout.');
+      }
+
+      window.location.href = data.checkoutUrl;
+    } catch (error) {
+      console.error('[Mercado Pago] checkout error', error);
+      alert('Não foi possível iniciar o checkout agora. Tente novamente em instantes.');
+    } finally {
+      setProcessingPlanId(null);
+    }
+  };
 
   return (
     <section id="pricing" className="py-24 bg-nexus-900 relative">
@@ -132,7 +189,9 @@ const Pricing: React.FC = () => {
                       key={plan.id} 
                       plan={plan} 
                       isHovered={hoveredCard === plan.id}
+                      isProcessing={processingPlanId === plan.id}
                       onHover={setHoveredCard}
+                      onSelect={handlePlanAction}
                     />
                 ))}
                 </motion.div>
@@ -141,7 +200,7 @@ const Pricing: React.FC = () => {
         
         <div className="mt-16 text-center border-t border-nexus-800 pt-8">
             <p className="text-nexus-muted text-sm">
-                Precisa de uma solução customizada para governança de dados? <a href="#" className="text-nexus-accent hover:underline">Entre em contato com nossa equipe de engenharia.</a>
+            Precisa de uma solução customizada para governança de dados? <a href="mailto:contato@topteamtecnologia.com" className="text-nexus-accent hover:underline">Entre em contato com nossa equipe de engenharia.</a>
             </p>
         </div>
       </div>
