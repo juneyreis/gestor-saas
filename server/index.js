@@ -69,7 +69,6 @@ const DEFAULT_PLAN_CATALOG = {
 };
 
 const INTERNAL_SESSION_COOKIE = 'saas_internal_session';
-const internalSessions = new Map();
 
 const parseInternalUsers = () => {
   if (INTERNAL_AUTH_USERS_JSON) {
@@ -454,7 +453,58 @@ const parseCookies = (cookieHeader) => {
     }, {});
 };
 
-const createSessionToken = () => crypto.randomBytes(32).toString('hex');
+const toBase64Url = (value) =>
+  Buffer.from(value, 'utf-8')
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+
+const fromBase64Url = (value) => {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const pad = normalized.length % 4;
+  const withPadding = pad === 0 ? normalized : normalized + '='.repeat(4 - pad);
+  return Buffer.from(withPadding, 'base64').toString('utf-8');
+};
+
+const signInternalSessionPayload = (payloadBase64Url) =>
+  crypto.createHmac('sha256', INTERNAL_AUTH_SECRET).update(payloadBase64Url).digest('hex');
+
+const createSignedSessionToken = ({ username, role, expiresAt }) => {
+  const payload = toBase64Url(JSON.stringify({ username, role, expiresAt }));
+  const signature = signInternalSessionPayload(payload);
+  return `${payload}.${signature}`;
+};
+
+const verifySignedSessionToken = (token) => {
+  if (!token || typeof token !== 'string') return null;
+
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+
+  const [payloadBase64Url, signature] = parts;
+  const expectedSignature = signInternalSessionPayload(payloadBase64Url);
+
+  const expectedBuffer = Buffer.from(expectedSignature, 'hex');
+  const signatureBuffer = Buffer.from(signature, 'hex');
+
+  if (!expectedBuffer.length || expectedBuffer.length !== signatureBuffer.length) return null;
+  if (!crypto.timingSafeEqual(expectedBuffer, signatureBuffer)) return null;
+
+  try {
+    const decoded = fromBase64Url(payloadBase64Url);
+    const parsed = JSON.parse(decoded);
+    if (!parsed?.username || !parsed?.role || !parsed?.expiresAt) return null;
+    if (Date.now() > Number(parsed.expiresAt)) return null;
+    return {
+      username: parsed.username,
+      role: parsed.role,
+      expiresAt: Number(parsed.expiresAt),
+    };
+  } catch {
+    return null;
+  }
+};
 
 const createCookieHeader = (token, options = {}) => {
   const attributes = [`${INTERNAL_SESSION_COOKIE}=${encodeURIComponent(token)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax'];
@@ -493,7 +543,7 @@ const requireInternalAccess = (allowedRoles = []) => (req, res, next) => {
   const cookies = parseCookies(req.get('cookie') || '');
   const sessionToken = cookies[INTERNAL_SESSION_COOKIE];
 
-  if (!sessionToken || !internalSessions.has(sessionToken)) {
+  if (!sessionToken) {
     if (isApiRequest(req)) {
       return res.status(401).json({ ok: false, message: 'Sessão inválida.' });
     }
@@ -501,22 +551,8 @@ const requireInternalAccess = (allowedRoles = []) => (req, res, next) => {
     return res.redirect('/internal/login');
   }
 
-  const session = internalSessions.get(sessionToken);
-  if (!session || Date.now() > session.expiresAt) {
-    internalSessions.delete(sessionToken);
-    if (isApiRequest(req)) {
-      return res.status(401).json({ ok: false, message: 'Sessão expirada.' });
-    }
-    return res.redirect('/internal/login');
-  }
-
-  const expectedSignature = crypto
-    .createHmac('sha256', INTERNAL_AUTH_SECRET)
-    .update(`${session.username}:${session.role}:${sessionToken}:${session.expiresAt}`)
-    .digest('hex');
-
-  if (session.signature !== expectedSignature) {
-    internalSessions.delete(sessionToken);
+  const session = verifySignedSessionToken(sessionToken);
+  if (!session) {
     if (isApiRequest(req)) {
       return res.status(401).json({ ok: false, message: 'Sessão inválida.' });
     }
@@ -1242,20 +1278,13 @@ app.post('/api/internal/auth/login', (req, res) => {
     return res.status(401).json({ ok: false, message: 'Credenciais inválidas.' });
   }
 
-  const sessionToken = createSessionToken();
   const sessionDurationSeconds = Math.max(1, Math.floor(INTERNAL_AUTH_SESSION_HOURS * 3600));
   const expiresAt = Date.now() + sessionDurationSeconds * 1000;
 
-  const signature = crypto
-    .createHmac('sha256', INTERNAL_AUTH_SECRET)
-    .update(`${internalUser.username}:${internalUser.role}:${sessionToken}:${expiresAt}`)
-    .digest('hex');
-
-  internalSessions.set(sessionToken, {
+  const sessionToken = createSignedSessionToken({
     username: internalUser.username,
     role: internalUser.role,
     expiresAt,
-    signature,
   });
 
   res.setHeader('Set-Cookie', createCookieHeader(sessionToken, { maxAge: sessionDurationSeconds }));
@@ -1270,13 +1299,6 @@ app.post('/api/internal/auth/login', (req, res) => {
 });
 
 app.post('/api/internal/auth/logout', (req, res) => {
-  const cookies = parseCookies(req.get('cookie') || '');
-  const sessionToken = cookies[INTERNAL_SESSION_COOKIE];
-
-  if (sessionToken) {
-    internalSessions.delete(sessionToken);
-  }
-
   res.setHeader('Set-Cookie', createCookieHeader('', { maxAge: 0 }));
   return res.status(200).json({ ok: true });
 });
