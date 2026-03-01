@@ -52,7 +52,7 @@ const DEFAULT_PLAN_CATALOG = {
   },
   'b2b-squad': {
     id: 'b2b-squad',
-    name: 'Squad',
+    name: 'Trial',
     unitPrice: 490,
     currency: 'BRL',
     active: true,

@@ -76,7 +76,7 @@ export const B2C_PLANS: PricingPlan[] = [
 export const B2B_PLANS: PricingPlan[] = [
   {
     id: 'b2b-squad',
-    name: 'Squad',
+    name: 'Trial',
     price: 'R$ 490',
     period: '/mês',
     description: 'Gestão de território para pequenas equipes externas.',

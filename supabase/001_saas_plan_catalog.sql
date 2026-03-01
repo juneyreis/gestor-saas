@@ -15,7 +15,7 @@ insert into public.saas_plan_catalog (id, name, unit_price, currency, active, bu
 values
   ('b2c-hunter', 'Hunter Pro', 49, 'BRL', true, 'Assinar Pro'),
   ('b2c-elite', 'Elite', 99, 'BRL', true, 'Assinar Elite'),
-  ('b2b-squad', 'Squad', 490, 'BRL', true, 'Teste Grátis'),
+  ('b2b-squad', 'Trial', 490, 'BRL', true, 'Teste Grátis'),
   ('b2b-field', 'Field Ops', 1200, 'BRL', true, 'Falar com Vendas')
 on conflict (id) do update
 set
