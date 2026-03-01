@@ -27,6 +27,10 @@ const INTERNAL_AUTH_SESSION_HOURS = Number(process.env.INTERNAL_AUTH_SESSION_HOU
 const CRM_SYNC_URL = process.env.CRM_SYNC_URL || '';
 const CRM_SYNC_TOKEN = process.env.CRM_SYNC_TOKEN || '';
 const CRM_SYNC_TIMEOUT_MS = Number(process.env.CRM_SYNC_TIMEOUT_MS || 8000);
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_PLAN_TABLE = process.env.SUPABASE_PLAN_TABLE || 'saas_plan_catalog';
+const IS_SUPABASE_PLAN_PERSISTENCE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
 const SAAS_PUBLIC_URL = APP_BASE_URL;
 
 const DEFAULT_PLAN_CATALOG = {
@@ -229,6 +233,123 @@ const hasProcessedSyncKey = async (syncKey) => {
   return db.crmSyncHistory.some((item) => item.syncKey === syncKey && item.status === 'success');
 };
 
+const getSupabaseBaseUrl = () => {
+  if (!SUPABASE_URL) return '';
+  return SUPABASE_URL.replace(/\/$/, '');
+};
+
+const buildSupabaseHeaders = () => ({
+  apikey: SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  'Content-Type': 'application/json',
+});
+
+const mapPlanRowToCatalogItem = (row) => ({
+  id: row.id,
+  name: row.name,
+  unitPrice: Number(row.unit_price),
+  currency: row.currency || 'BRL',
+  active: row.active !== false,
+  buttonText: row.button_text || 'Assinar',
+  updatedAt: row.updated_at || new Date().toISOString(),
+});
+
+const fetchPlanCatalogFromSupabase = async () => {
+  if (!IS_SUPABASE_PLAN_PERSISTENCE_ENABLED) {
+    return { ok: false, reason: 'supabase-disabled', plans: [] };
+  }
+
+  try {
+    const query = `select=id,name,unit_price,currency,active,button_text,updated_at`;
+    const response = await fetch(`${getSupabaseBaseUrl()}/rest/v1/${SUPABASE_PLAN_TABLE}?${query}`, {
+      method: 'GET',
+      headers: buildSupabaseHeaders(),
+    });
+
+    const rows = await response.json().catch(() => []);
+
+    if (!response.ok) {
+      return { ok: false, reason: 'supabase-read-error', plans: [] };
+    }
+
+    if (!Array.isArray(rows)) {
+      return { ok: true, plans: [] };
+    }
+
+    return {
+      ok: true,
+      plans: rows.map(mapPlanRowToCatalogItem),
+    };
+  } catch {
+    return { ok: false, reason: 'supabase-read-exception', plans: [] };
+  }
+};
+
+const upsertPlanCatalogInSupabase = async (plan) => {
+  if (!IS_SUPABASE_PLAN_PERSISTENCE_ENABLED) {
+    return { ok: false, reason: 'supabase-disabled' };
+  }
+
+  try {
+    const payload = {
+      id: plan.id,
+      name: plan.name,
+      unit_price: Number(plan.unitPrice),
+      currency: plan.currency || 'BRL',
+      active: plan.active !== false,
+      button_text: plan.buttonText || 'Assinar',
+      updated_at: new Date().toISOString(),
+    };
+
+    const response = await fetch(`${getSupabaseBaseUrl()}/rest/v1/${SUPABASE_PLAN_TABLE}`, {
+      method: 'POST',
+      headers: {
+        ...buildSupabaseHeaders(),
+        Prefer: 'resolution=merge-duplicates,return=representation',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const rows = await response.json().catch(() => []);
+    if (!response.ok || !Array.isArray(rows) || !rows.length) {
+      return { ok: false, reason: 'supabase-upsert-error' };
+    }
+
+    return { ok: true, plan: mapPlanRowToCatalogItem(rows[0]) };
+  } catch {
+    return { ok: false, reason: 'supabase-upsert-exception' };
+  }
+};
+
+const deletePlanCatalogInSupabase = async (planId) => {
+  if (!IS_SUPABASE_PLAN_PERSISTENCE_ENABLED) {
+    return { ok: false, reason: 'supabase-disabled' };
+  }
+
+  try {
+    const response = await fetch(`${getSupabaseBaseUrl()}/rest/v1/${SUPABASE_PLAN_TABLE}?id=eq.${encodeURIComponent(planId)}`, {
+      method: 'DELETE',
+      headers: {
+        ...buildSupabaseHeaders(),
+        Prefer: 'return=representation',
+      },
+    });
+
+    const rows = await response.json().catch(() => []);
+    if (!response.ok) {
+      return { ok: false, reason: 'supabase-delete-error' };
+    }
+
+    if (!Array.isArray(rows) || !rows.length) {
+      return { ok: false, reason: 'not-found' };
+    }
+
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: 'supabase-delete-exception' };
+  }
+};
+
 const sanitizePlanRecord = (input, fallbackId = '') => {
   const normalizedId = (input?.id || fallbackId || '').toString().trim().toLowerCase();
   const normalizedName = (input?.name || '').toString().trim();
@@ -251,6 +372,13 @@ const sanitizePlanRecord = (input, fallbackId = '') => {
 };
 
 const getPlanCatalog = async () => {
+  if (IS_SUPABASE_PLAN_PERSISTENCE_ENABLED) {
+    const supabaseResult = await fetchPlanCatalogFromSupabase();
+    if (supabaseResult.ok && supabaseResult.plans.length) {
+      return Object.fromEntries(supabaseResult.plans.map((plan) => [plan.id, plan]));
+    }
+  }
+
   const db = await readDatabase();
   return db.planCatalog || DEFAULT_PLAN_CATALOG;
 };
@@ -272,6 +400,13 @@ const savePlanCatalogRecord = async (planInput, fallbackId = '') => {
     return { ok: false, reason: 'invalid-plan-payload' };
   }
 
+  if (IS_SUPABASE_PLAN_PERSISTENCE_ENABLED) {
+    const supabaseResult = await upsertPlanCatalogInSupabase(normalized);
+    if (supabaseResult.ok) {
+      return { ok: true, plan: supabaseResult.plan };
+    }
+  }
+
   const db = await readDatabase();
   db.planCatalog = db.planCatalog && typeof db.planCatalog === 'object' ? db.planCatalog : { ...DEFAULT_PLAN_CATALOG };
   db.planCatalog[normalized.id] = {
@@ -284,6 +419,13 @@ const savePlanCatalogRecord = async (planInput, fallbackId = '') => {
 };
 
 const deletePlanCatalogRecord = async (planId) => {
+  if (IS_SUPABASE_PLAN_PERSISTENCE_ENABLED) {
+    const supabaseResult = await deletePlanCatalogInSupabase(planId);
+    if (supabaseResult.ok || supabaseResult.reason === 'not-found') {
+      return supabaseResult;
+    }
+  }
+
   const db = await readDatabase();
   if (!db.planCatalog || !db.planCatalog[planId]) {
     return { ok: false, reason: 'not-found' };
@@ -738,7 +880,7 @@ const buildPlansAdminHtml = (plans, user) => {
     document.getElementById('reset-form').addEventListener('click', resetForm);
     document.getElementById('logout-btn').addEventListener('click', async () => {
       await fetch('/api/internal/auth/logout', { method: 'POST' });
-      window.location.href = '/internal/login';
+      window.location.href = '${SAAS_PUBLIC_URL}';
     });
 
     window.editPlan = editPlan;
@@ -1342,6 +1484,7 @@ if (process.env.VERCEL !== '1') {
     console.info(`Mercado Pago backend running at http://localhost:${PORT}`);
     console.info(`Internal login at http://localhost:${PORT}/internal/login`);
     console.info(`Internal dashboard at http://localhost:${PORT}/internal/payments`);
+    console.info(`Plan catalog persistence: ${IS_SUPABASE_PLAN_PERSISTENCE_ENABLED ? `supabase (${SUPABASE_PLAN_TABLE})` : 'local/in-memory (não persistente na Vercel)'}`);
     console.info(`CRM sync ${CRM_SYNC_URL ? `enabled -> ${CRM_SYNC_URL}` : 'disabled (CRM_SYNC_URL not configured)'}`);
   });
 }
