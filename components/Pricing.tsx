@@ -8,6 +8,8 @@ interface PublicPlanCatalogItem {
   id: string;
   name: string;
   unitPrice: number;
+  segment?: 'b2c' | 'b2b';
+  displayOrder?: number;
   buttonText?: string;
   active?: boolean;
 }
@@ -124,8 +126,8 @@ const Pricing: React.FC = () => {
   }, []);
 
   const mergedB2CPlans = useMemo(
-    () =>
-      B2C_PLANS.map((plan) => {
+    () => {
+      const mappedPlans = B2C_PLANS.map((plan) => {
         const catalogItem = publicPlans[plan.id];
         if (!catalogItem) {
           if (catalogLoaded && plan.checkoutAmount) {
@@ -133,9 +135,13 @@ const Pricing: React.FC = () => {
               ...plan,
               checkoutAmount: undefined,
               buttonText: 'Indisponível no momento',
+              __displayOrder: 99,
             };
           }
-          return plan;
+          return {
+            ...plan,
+            __displayOrder: 99,
+          };
         }
 
         return {
@@ -144,14 +150,18 @@ const Pricing: React.FC = () => {
           buttonText: catalogItem.buttonText || plan.buttonText,
           checkoutAmount: catalogItem.unitPrice,
           price: `R$ ${catalogItem.unitPrice}`,
+          __displayOrder: Number.isFinite(Number(catalogItem.displayOrder)) ? Number(catalogItem.displayOrder) : 99,
         };
-      }),
+      });
+
+      return mappedPlans.sort((left, right) => (left.__displayOrder || 99) - (right.__displayOrder || 99));
+    },
     [publicPlans, catalogLoaded]
   );
 
   const mergedB2BPlans = useMemo(
-    () =>
-      B2B_PLANS.map((plan) => {
+    () => {
+      const mappedPlans = B2B_PLANS.map((plan) => {
         const catalogItem = publicPlans[plan.id];
         if (!catalogItem) {
           if (catalogLoaded && plan.checkoutAmount) {
@@ -159,9 +169,13 @@ const Pricing: React.FC = () => {
               ...plan,
               checkoutAmount: undefined,
               buttonText: 'Indisponível no momento',
+              __displayOrder: 99,
             };
           }
-          return plan;
+          return {
+            ...plan,
+            __displayOrder: 99,
+          };
         }
 
         return {
@@ -170,19 +184,23 @@ const Pricing: React.FC = () => {
           buttonText: catalogItem.buttonText || plan.buttonText,
           checkoutAmount: catalogItem.unitPrice,
           price: `R$ ${catalogItem.unitPrice}`,
+          __displayOrder: Number.isFinite(Number(catalogItem.displayOrder)) ? Number(catalogItem.displayOrder) : 99,
         };
-      }),
+      });
+
+      return mappedPlans.sort((left, right) => (left.__displayOrder || 99) - (right.__displayOrder || 99));
+    },
     [publicPlans, catalogLoaded]
   );
 
   const handlePlanAction = async (plan: PricingPlan) => {
     if (!plan.checkoutAmount) {
-      if (plan.id === 'b2c-scout') {
+      if (plan.id === 'b2c-card1') {
         window.open('https://crmgestor.vercel.app/login', '_blank', 'noopener,noreferrer');
         return;
       }
 
-      if (plan.id === 'b2b-enterprise') {
+      if (plan.id === 'b2b-card3') {
         window.location.href = 'mailto:contato@topteamtecnologia.com?subject=Plano%20Enterprise%20-%20Gestor%20CRM';
         return;
       }

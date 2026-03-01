@@ -1,8 +1,10 @@
 create table if not exists public.saas_plan_catalog (
   id text primary key,
   name text not null,
-  unit_price numeric(12,2) not null check (unit_price > 0),
+  unit_price numeric(12,2) not null check (unit_price >= 0),
   currency text not null default 'BRL',
+  segment text not null default 'b2c' check (segment in ('b2c', 'b2b')),
+  display_order integer not null default 99 check (display_order > 0),
   active boolean not null default true,
   button_text text not null default 'Assinar',
   updated_at timestamptz not null default now()
@@ -11,17 +13,23 @@ create table if not exists public.saas_plan_catalog (
 create index if not exists idx_saas_plan_catalog_active
   on public.saas_plan_catalog (active);
 
-insert into public.saas_plan_catalog (id, name, unit_price, currency, active, button_text)
+create index if not exists idx_saas_plan_catalog_segment_order
+  on public.saas_plan_catalog (segment, display_order);
+
+insert into public.saas_plan_catalog (id, name, unit_price, currency, segment, display_order, active, button_text)
 values
-  ('b2c-hunter', 'Hunter Pro', 49, 'BRL', true, 'Assinar Pro'),
-  ('b2c-elite', 'Elite', 99, 'BRL', true, 'Assinar Elite'),
-  ('b2b-squad', 'Trial', 490, 'BRL', true, 'Teste Grátis'),
-  ('b2b-field', 'Field Ops', 1200, 'BRL', true, 'Falar com Vendas')
+  ('b2c-card1', 'Trial', 0, 'BRL', 'b2c', 1, true, 'Começar Agora'),
+  ('b2c-card2', 'Mensal', 98, 'BRL', 'b2c', 2, true, 'Assinar Pro'),
+  ('b2c-card3', 'Trimestral', 270, 'BRL', 'b2c', 3, true, 'Assinar Elite'),
+  ('b2b-card1', 'Trial', 0, 'BRL', 'b2b', 1, true, 'Teste Grátis'),
+  ('b2b-card2', 'Mensal', 490, 'BRL', 'b2b', 2, true, 'Falar com Vendas')
 on conflict (id) do update
 set
   name = excluded.name,
   unit_price = excluded.unit_price,
   currency = excluded.currency,
+  segment = excluded.segment,
+  display_order = excluded.display_order,
   active = excluded.active,
   button_text = excluded.button_text,
   updated_at = now();

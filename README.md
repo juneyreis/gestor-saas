@@ -82,6 +82,8 @@ Pré-requisito: Node.js 18+
 - O checkout usa nome/valor oficiais do backend por `planId`.
 - O frontend não define mais o valor final de cobrança no Mercado Pago.
 - Alterações de nome/valor podem ser feitas em `/internal/plans` por usuário `admin`.
+- O catálogo agora inclui `segment` (`b2c`/`b2b`) e `display_order` para controlar agrupamento e ordem dos cards.
+- Mantenha `id` como chave técnica estável (não usar `CARD1`, `CARD2` para evitar quebra de integrações).
 
 ## Persistência de planos na Vercel (importante)
 
@@ -90,6 +92,10 @@ Em runtime serverless, memória/arquivo local não são persistentes entre deplo
 1. Configure `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` nas variáveis da Vercel.
 2. Execute o script SQL [supabase/001_saas_plan_catalog.sql](supabase/001_saas_plan_catalog.sql) no SQL Editor do Supabase.
 3. (Opcional) Defina `SUPABASE_PLAN_TABLE` caso use outro nome de tabela.
+
+Se sua tabela já existia antes da inclusão de plano gratuito (`b2c-card1`), execute também:
+
+- [supabase/002_allow_free_plans_and_seed_scout.sql](supabase/002_allow_free_plans_and_seed_scout.sql)
 
 Sem Supabase configurado, o catálogo volta ao padrão após deploy/cold start no ambiente serverless.
 

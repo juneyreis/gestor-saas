@@ -24,8 +24,8 @@ export const HERO_CHART_DATA: ChartDataPoint[] = [
 
 export const B2C_PLANS: PricingPlan[] = [
   {
-    id: 'b2c-scout',
-    name: 'Scout',
+    id: 'b2c-card1',
+    name: 'Trial',
     price: 'R$ 0',
     period: '/mês',
     description: 'Para vendedores organizarem sua carteira pessoal.',
@@ -39,7 +39,7 @@ export const B2C_PLANS: PricingPlan[] = [
     ],
   },
   {
-    id: 'b2c-hunter',
+    id: 'b2c-card2',
     name: 'Hunter Pro',
     price: 'R$ 49',
     period: '/mês',
@@ -56,7 +56,7 @@ export const B2C_PLANS: PricingPlan[] = [
     checkoutAmount: 49,
   },
   {
-    id: 'b2c-elite',
+    id: 'b2c-card3',
     name: 'Elite',
     price: 'R$ 99',
     period: '/mês',
@@ -75,7 +75,7 @@ export const B2C_PLANS: PricingPlan[] = [
 
 export const B2B_PLANS: PricingPlan[] = [
   {
-    id: 'b2b-squad',
+    id: 'b2b-card1',
     name: 'Trial',
     price: 'R$ 490',
     period: '/mês',
@@ -91,7 +91,7 @@ export const B2B_PLANS: PricingPlan[] = [
     checkoutAmount: 490,
   },
   {
-    id: 'b2b-field',
+    id: 'b2b-card2',
     name: 'Field Ops',
     price: 'R$ 1.200',
     period: '/mês',
@@ -108,7 +108,7 @@ export const B2B_PLANS: PricingPlan[] = [
     checkoutAmount: 1200,
   },
   {
-    id: 'b2b-enterprise',
+    id: 'b2b-card3',
     name: 'Enterprise',
     price: 'Sob Consulta',
     period: '',

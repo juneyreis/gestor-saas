@@ -34,35 +34,53 @@ const IS_SUPABASE_PLAN_PERSISTENCE_ENABLED = Boolean(SUPABASE_URL && SUPABASE_SE
 const SAAS_PUBLIC_URL = APP_BASE_URL;
 
 const DEFAULT_PLAN_CATALOG = {
-  'b2c-hunter': {
-    id: 'b2c-hunter',
+  'b2c-card1': {
+    id: 'b2c-card1',
+    name: 'Trial',
+    unitPrice: 0,
+    currency: 'BRL',
+    segment: 'b2c',
+    displayOrder: 1,
+    active: true,
+    buttonText: 'Começar Agora',
+  },
+  'b2c-card2': {
+    id: 'b2c-card2',
     name: 'Hunter Pro',
     unitPrice: 49,
     currency: 'BRL',
+    segment: 'b2c',
+    displayOrder: 2,
     active: true,
     buttonText: 'Assinar Pro',
   },
-  'b2c-elite': {
-    id: 'b2c-elite',
+  'b2c-card3': {
+    id: 'b2c-card3',
     name: 'Elite',
     unitPrice: 99,
     currency: 'BRL',
+    segment: 'b2c',
+    displayOrder: 3,
     active: true,
     buttonText: 'Assinar Elite',
   },
-  'b2b-squad': {
-    id: 'b2b-squad',
+  'b2b-card1': {
+    id: 'b2b-card1',
     name: 'Trial',
     unitPrice: 490,
     currency: 'BRL',
+    segment: 'b2b',
+    displayOrder: 1,
     active: true,
     buttonText: 'Teste Grátis',
   },
-  'b2b-field': {
-    id: 'b2b-field',
+  'b2b-card2': {
+    id: 'b2b-card2',
     name: 'Field Ops',
     unitPrice: 1200,
     currency: 'BRL',
+    segment: 'b2b',
+    displayOrder: 2,
     active: true,
     buttonText: 'Falar com Vendas',
   },
@@ -248,6 +266,8 @@ const mapPlanRowToCatalogItem = (row) => ({
   name: row.name,
   unitPrice: Number(row.unit_price),
   currency: row.currency || 'BRL',
+  segment: row.segment || (row.id?.startsWith('b2b-') ? 'b2b' : 'b2c'),
+  displayOrder: Number.isFinite(Number(row.display_order)) ? Number(row.display_order) : 99,
   active: row.active !== false,
   buttonText: row.button_text || 'Assinar',
   updatedAt: row.updated_at || new Date().toISOString(),
@@ -259,7 +279,7 @@ const fetchPlanCatalogFromSupabase = async () => {
   }
 
   try {
-    const query = `select=id,name,unit_price,currency,active,button_text,updated_at`;
+    const query = `select=id,name,unit_price,currency,segment,display_order,active,button_text,updated_at`;
     const response = await fetch(`${getSupabaseBaseUrl()}/rest/v1/${SUPABASE_PLAN_TABLE}?${query}`, {
       method: 'GET',
       headers: buildSupabaseHeaders(),
@@ -295,6 +315,8 @@ const upsertPlanCatalogInSupabase = async (plan) => {
       name: plan.name,
       unit_price: Number(plan.unitPrice),
       currency: plan.currency || 'BRL',
+      segment: plan.segment || (plan.id?.startsWith('b2b-') ? 'b2b' : 'b2c'),
+      display_order: Number.isFinite(Number(plan.displayOrder)) ? Number(plan.displayOrder) : 99,
       active: plan.active !== false,
       button_text: plan.buttonText || 'Assinar',
       updated_at: new Date().toISOString(),
@@ -349,13 +371,20 @@ const deletePlanCatalogInSupabase = async (planId) => {
   }
 };
 
+const normalizeSegment = (id, segment) => {
+  const raw = (segment || '').toString().trim().toLowerCase();
+  if (raw === 'b2c' || raw === 'b2b') return raw;
+  return id.startsWith('b2b-') ? 'b2b' : 'b2c';
+};
+
 const sanitizePlanRecord = (input, fallbackId = '') => {
   const normalizedId = (input?.id || fallbackId || '').toString().trim().toLowerCase();
   const normalizedName = (input?.name || '').toString().trim();
   const parsedPrice = Number(input?.unitPrice);
+  const parsedDisplayOrder = Number(input?.displayOrder);
   const normalizedButtonText = (input?.buttonText || '').toString().trim();
 
-  if (!normalizedId || !normalizedName || !Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+  if (!normalizedId || !normalizedName || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
     return null;
   }
 
@@ -364,6 +393,8 @@ const sanitizePlanRecord = (input, fallbackId = '') => {
     name: normalizedName,
     unitPrice: parsedPrice,
     currency: 'BRL',
+    segment: normalizeSegment(normalizedId, input?.segment),
+    displayOrder: Number.isFinite(parsedDisplayOrder) ? Math.max(1, Math.floor(parsedDisplayOrder)) : 99,
     active: input?.active !== false,
     buttonText: normalizedButtonText || 'Assinar',
     updatedAt: new Date().toISOString(),
@@ -385,7 +416,13 @@ const getPlanCatalog = async () => {
 const getPlanCatalogEntries = async ({ includeInactive = true } = {}) => {
   const catalog = await getPlanCatalog();
   const plans = Object.values(catalog || {});
-  return includeInactive ? plans : plans.filter((plan) => plan.active !== false);
+  const filtered = includeInactive ? plans : plans.filter((plan) => plan.active !== false);
+  return filtered.sort((left, right) => {
+    if (left.segment !== right.segment) {
+      return left.segment === 'b2c' ? -1 : 1;
+    }
+    return (left.displayOrder || 99) - (right.displayOrder || 99);
+  });
 };
 
 const getCatalogPlanById = async (planId) => {
@@ -747,6 +784,8 @@ const buildPlansAdminHtml = (plans, user) => {
       (plan) => `<tr>
         <td>${plan.id}</td>
         <td>${plan.name}</td>
+        <td>${plan.segment || '-'}</td>
+        <td>${plan.displayOrder || 99}</td>
         <td>R$ ${plan.unitPrice}</td>
         <td>${plan.buttonText || 'Assinar'}</td>
         <td>${plan.active === false ? 'Inativo' : 'Ativo'}</td>
@@ -801,7 +840,7 @@ const buildPlansAdminHtml = (plans, user) => {
       <div class="grid">
         <div>
           <label>ID do plano</label>
-          <input id="plan-id" placeholder="ex: b2c-hunter" required />
+          <input id="plan-id" placeholder="ex: b2c-card2" required />
         </div>
         <div>
           <label>Nome</label>
@@ -809,11 +848,22 @@ const buildPlansAdminHtml = (plans, user) => {
         </div>
         <div>
           <label>Valor (R$)</label>
-          <input id="plan-price" type="number" min="1" step="0.01" required />
+          <input id="plan-price" type="number" min="0" step="0.01" required />
         </div>
         <div>
           <label>Texto do botão</label>
           <input id="plan-button" placeholder="ex: Assinar Pro" required />
+        </div>
+        <div>
+          <label>Segmento</label>
+          <select id="plan-segment">
+            <option value="b2c">B2C</option>
+            <option value="b2b">B2B</option>
+          </select>
+        </div>
+        <div>
+          <label>Ordem de exibição</label>
+          <input id="plan-display-order" type="number" min="1" step="1" value="99" required />
         </div>
         <div>
           <label>Status</label>
@@ -836,6 +886,8 @@ const buildPlansAdminHtml = (plans, user) => {
         <tr>
           <th>ID</th>
           <th>Nome</th>
+          <th>Segmento</th>
+          <th>Ordem</th>
           <th>Valor</th>
           <th>Botão</th>
           <th>Status</th>
@@ -843,7 +895,7 @@ const buildPlansAdminHtml = (plans, user) => {
         </tr>
       </thead>
       <tbody>
-        ${rows || '<tr><td colspan="6">Nenhum plano cadastrado.</td></tr>'}
+        ${rows || '<tr><td colspan="8">Nenhum plano cadastrado.</td></tr>'}
       </tbody>
     </table>
   </div>
@@ -858,6 +910,8 @@ const buildPlansAdminHtml = (plans, user) => {
       document.getElementById('plan-name').value = '';
       document.getElementById('plan-price').value = '';
       document.getElementById('plan-button').value = '';
+      document.getElementById('plan-segment').value = 'b2c';
+      document.getElementById('plan-display-order').value = '99';
       document.getElementById('plan-active').value = 'true';
     };
 
@@ -868,6 +922,8 @@ const buildPlansAdminHtml = (plans, user) => {
       document.getElementById('plan-name').value = plan.name || '';
       document.getElementById('plan-price').value = plan.unitPrice || '';
       document.getElementById('plan-button').value = plan.buttonText || '';
+      document.getElementById('plan-segment').value = plan.segment || 'b2c';
+      document.getElementById('plan-display-order').value = plan.displayOrder || 99;
       document.getElementById('plan-active').value = plan.active === false ? 'false' : 'true';
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -894,6 +950,8 @@ const buildPlansAdminHtml = (plans, user) => {
         name: document.getElementById('plan-name').value,
         unitPrice: Number(document.getElementById('plan-price').value),
         buttonText: document.getElementById('plan-button').value,
+        segment: document.getElementById('plan-segment').value,
+        displayOrder: Number(document.getElementById('plan-display-order').value),
         active: document.getElementById('plan-active').value === 'true',
       };
 
