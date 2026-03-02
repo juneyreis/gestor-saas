@@ -111,7 +111,7 @@ export const B2B_PLANS: PricingPlan[] = [
     id: 'b2b-card3',
     name: 'Enterprise',
     price: 'Sob Consulta',
-    period: '',
+    period: '/mês',
     description: 'Escala global e inteligência de mercado customizada.',
     buttonText: 'Contatar',
     features: [

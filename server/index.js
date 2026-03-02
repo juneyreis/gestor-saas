@@ -39,6 +39,7 @@ const DEFAULT_PLAN_CATALOG = {
     name: 'Trial',
     unitPrice: 0,
     currency: 'BRL',
+    billingCycleMonths: 1,
     segment: 'b2c',
     displayOrder: 1,
     active: true,
@@ -49,6 +50,7 @@ const DEFAULT_PLAN_CATALOG = {
     name: 'Hunter Pro',
     unitPrice: 49,
     currency: 'BRL',
+    billingCycleMonths: 1,
     segment: 'b2c',
     displayOrder: 2,
     active: true,
@@ -59,6 +61,7 @@ const DEFAULT_PLAN_CATALOG = {
     name: 'Elite',
     unitPrice: 99,
     currency: 'BRL',
+    billingCycleMonths: 1,
     segment: 'b2c',
     displayOrder: 3,
     active: true,
@@ -69,6 +72,7 @@ const DEFAULT_PLAN_CATALOG = {
     name: 'Trial',
     unitPrice: 490,
     currency: 'BRL',
+    billingCycleMonths: 1,
     segment: 'b2b',
     displayOrder: 1,
     active: true,
@@ -79,6 +83,7 @@ const DEFAULT_PLAN_CATALOG = {
     name: 'Field Ops',
     unitPrice: 1200,
     currency: 'BRL',
+    billingCycleMonths: 1,
     segment: 'b2b',
     displayOrder: 2,
     active: true,
@@ -266,6 +271,9 @@ const mapPlanRowToCatalogItem = (row) => ({
   name: row.name,
   unitPrice: Number(row.unit_price),
   currency: row.currency || 'BRL',
+  billingCycleMonths: Number.isFinite(Number(row.billing_cycle_months)) && Number(row.billing_cycle_months) >= 1
+    ? Math.floor(Number(row.billing_cycle_months))
+    : 1,
   segment: row.segment || (row.id?.startsWith('b2b-') ? 'b2b' : 'b2c'),
   displayOrder: Number.isFinite(Number(row.display_order)) ? Number(row.display_order) : 99,
   active: row.active !== false,
@@ -279,7 +287,7 @@ const fetchPlanCatalogFromSupabase = async () => {
   }
 
   try {
-    const query = `select=id,name,unit_price,currency,segment,display_order,active,button_text,updated_at`;
+    const query = `select=id,name,unit_price,currency,billing_cycle_months,segment,display_order,active,button_text,updated_at`;
     const response = await fetch(`${getSupabaseBaseUrl()}/rest/v1/${SUPABASE_PLAN_TABLE}?${query}`, {
       method: 'GET',
       headers: buildSupabaseHeaders(),
@@ -315,6 +323,9 @@ const upsertPlanCatalogInSupabase = async (plan) => {
       name: plan.name,
       unit_price: Number(plan.unitPrice),
       currency: plan.currency || 'BRL',
+      billing_cycle_months: Number.isFinite(Number(plan.billingCycleMonths)) && Number(plan.billingCycleMonths) >= 1
+        ? Math.floor(Number(plan.billingCycleMonths))
+        : 1,
       segment: plan.segment || (plan.id?.startsWith('b2b-') ? 'b2b' : 'b2c'),
       display_order: Number.isFinite(Number(plan.displayOrder)) ? Number(plan.displayOrder) : 99,
       active: plan.active !== false,
@@ -382,9 +393,14 @@ const sanitizePlanRecord = (input, fallbackId = '') => {
   const normalizedName = (input?.name || '').toString().trim();
   const parsedPrice = Number(input?.unitPrice);
   const parsedDisplayOrder = Number(input?.displayOrder);
+  const parsedBillingCycleMonths = Number(input?.billingCycleMonths ?? 1);
   const normalizedButtonText = (input?.buttonText || '').toString().trim();
 
   if (!normalizedId || !normalizedName || !Number.isFinite(parsedPrice) || parsedPrice < 0) {
+    return null;
+  }
+
+  if (!Number.isInteger(parsedBillingCycleMonths) || parsedBillingCycleMonths < 1) {
     return null;
   }
 
@@ -393,6 +409,7 @@ const sanitizePlanRecord = (input, fallbackId = '') => {
     name: normalizedName,
     unitPrice: parsedPrice,
     currency: 'BRL',
+    billingCycleMonths: parsedBillingCycleMonths,
     segment: normalizeSegment(normalizedId, input?.segment),
     displayOrder: Number.isFinite(parsedDisplayOrder) ? Math.max(1, Math.floor(parsedDisplayOrder)) : 99,
     active: input?.active !== false,
@@ -785,6 +802,7 @@ const buildPlansAdminHtml = (plans, user) => {
         <td>${plan.id}</td>
         <td>${plan.name}</td>
         <td>${plan.segment || '-'}</td>
+        <td>${plan.billingCycleMonths || 1}</td>
         <td>${plan.displayOrder || 99}</td>
         <td>R$ ${plan.unitPrice}</td>
         <td>${plan.buttonText || 'Assinar'}</td>
@@ -855,6 +873,10 @@ const buildPlansAdminHtml = (plans, user) => {
           <input id="plan-button" placeholder="ex: Assinar Pro" required />
         </div>
         <div>
+          <label>Ciclo (meses)</label>
+          <input id="plan-billing-cycle-months" type="number" min="1" step="1" value="1" required />
+        </div>
+        <div>
           <label>Segmento</label>
           <select id="plan-segment">
             <option value="b2c">B2C</option>
@@ -887,6 +909,7 @@ const buildPlansAdminHtml = (plans, user) => {
           <th>ID</th>
           <th>Nome</th>
           <th>Segmento</th>
+          <th>Ciclo (meses)</th>
           <th>Ordem</th>
           <th>Valor</th>
           <th>Botão</th>
@@ -895,7 +918,7 @@ const buildPlansAdminHtml = (plans, user) => {
         </tr>
       </thead>
       <tbody>
-        ${rows || '<tr><td colspan="8">Nenhum plano cadastrado.</td></tr>'}
+        ${rows || '<tr><td colspan="9">Nenhum plano cadastrado.</td></tr>'}
       </tbody>
     </table>
   </div>
@@ -910,6 +933,7 @@ const buildPlansAdminHtml = (plans, user) => {
       document.getElementById('plan-name').value = '';
       document.getElementById('plan-price').value = '';
       document.getElementById('plan-button').value = '';
+      document.getElementById('plan-billing-cycle-months').value = '1';
       document.getElementById('plan-segment').value = 'b2c';
       document.getElementById('plan-display-order').value = '99';
       document.getElementById('plan-active').value = 'true';
@@ -920,10 +944,11 @@ const buildPlansAdminHtml = (plans, user) => {
       if (!plan) return;
       document.getElementById('plan-id').value = plan.id || '';
       document.getElementById('plan-name').value = plan.name || '';
-      document.getElementById('plan-price').value = plan.unitPrice || '';
+      document.getElementById('plan-price').value = plan.unitPrice ?? '';
       document.getElementById('plan-button').value = plan.buttonText || '';
+      document.getElementById('plan-billing-cycle-months').value = plan.billingCycleMonths ?? 1;
       document.getElementById('plan-segment').value = plan.segment || 'b2c';
-      document.getElementById('plan-display-order').value = plan.displayOrder || 99;
+      document.getElementById('plan-display-order').value = plan.displayOrder ?? 99;
       document.getElementById('plan-active').value = plan.active === false ? 'false' : 'true';
       window.scrollTo({ top: 0, behavior: 'smooth' });
     };
@@ -950,6 +975,7 @@ const buildPlansAdminHtml = (plans, user) => {
         name: document.getElementById('plan-name').value,
         unitPrice: Number(document.getElementById('plan-price').value),
         buttonText: document.getElementById('plan-button').value,
+        billingCycleMonths: Number(document.getElementById('plan-billing-cycle-months').value),
         segment: document.getElementById('plan-segment').value,
         displayOrder: Number(document.getElementById('plan-display-order').value),
         active: document.getElementById('plan-active').value === 'true',
@@ -1434,11 +1460,19 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
 
     const parsedUnitPrice = Number(catalogPlan.unitPrice);
     const parsedQuantity = Number(quantity);
+    const parsedBillingCycleMonths = Number(catalogPlan.billingCycleMonths ?? 1);
 
     if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0) {
       return res.status(400).json({
         ok: false,
         message: 'unitPrice inválido.',
+      });
+    }
+
+    if (!Number.isInteger(parsedBillingCycleMonths) || parsedBillingCycleMonths < 1) {
+      return res.status(400).json({
+        ok: false,
+        message: 'billingCycleMonths inválido.',
       });
     }
 
@@ -1449,14 +1483,16 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
       });
     }
 
+    const totalUnitPrice = Number((parsedUnitPrice * parsedBillingCycleMonths).toFixed(2));
+
     const preferencePayload = {
       items: [
         {
           id: planId,
-          title: `${catalogPlan.name} - Gestor CRM`,
+          title: `${catalogPlan.name} (${parsedBillingCycleMonths} ${parsedBillingCycleMonths === 1 ? 'mês' : 'meses'}) - Gestor CRM`,
           quantity: parsedQuantity,
           currency_id: catalogPlan.currency || 'BRL',
-          unit_price: parsedUnitPrice,
+          unit_price: totalUnitPrice,
         },
       ],
       external_reference: `plan-${planId}-${Date.now()}`,
@@ -1495,9 +1531,11 @@ app.post('/api/mercadopago/create-preference', async (req, res) => {
     await saveCheckoutRecord({
       createdAt: new Date().toISOString(),
       planId,
-      title: `${catalogPlan.name} - Gestor CRM`,
+      title: `${catalogPlan.name} (${parsedBillingCycleMonths} ${parsedBillingCycleMonths === 1 ? 'mês' : 'meses'}) - Gestor CRM`,
       quantity: parsedQuantity,
-      unitPrice: parsedUnitPrice,
+      unitPrice: totalUnitPrice,
+      unitPriceMonthly: parsedUnitPrice,
+      billingCycleMonths: parsedBillingCycleMonths,
       preferenceId: data.id || '',
       checkoutUrl: data.init_point || '',
       sandboxCheckoutUrl: data.sandbox_init_point || '',
