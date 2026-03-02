@@ -43,7 +43,7 @@ const PricingCard: React.FC<{
       )}
 
       <div className="mb-6">
-        <h3 className={`text-xl font-bold ${hasHighlightEffect ? 'text-white' : 'text-nexus-muted'}`}>
+        <h3 className="text-3xl md:text-4xl font-bold text-white text-center">
           {plan.name}
         </h3>
         <p className="text-sm text-nexus-muted mt-2 h-10">{plan.description}</p>
