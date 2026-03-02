@@ -635,6 +635,23 @@ const buildDashboardHtml = (snapshot, user) => {
     </tr>`)
     .join('');
 
+  const paymentCards = snapshot.payments
+    .map(
+      (payment) => `<div class="mobile-item-card">
+        <div class="mobile-item-title">${payment.paymentId || '-'}</div>
+        <div class="mobile-item-grid">
+          <div><strong>Plano</strong><span>${payment.planId || '-'}</span></div>
+          <div><strong>Tópico</strong><span>${payment.topic || '-'}</span></div>
+          <div><strong>Status</strong><span>${payment.status || '-'}</span></div>
+          <div><strong>Detail</strong><span>${payment.statusDetail || '-'}</span></div>
+          <div><strong>Valor</strong><span>${payment.amount != null ? `R$ ${payment.amount}` : '-'}</span></div>
+          <div><strong>Sync CRM</strong><span>${payment.crmSyncStatus || '-'}</span></div>
+          <div><strong>Atualizado</strong><span>${payment.updatedAt || '-'}</span></div>
+        </div>
+      </div>`
+    )
+    .join('');
+
   const webhookRows = snapshot.webhooks
     .map((event) => `<tr>
       <td>${event.receivedAt || '-'}</td>
@@ -643,6 +660,20 @@ const buildDashboardHtml = (snapshot, user) => {
       <td>${event.resourceId || '-'}</td>
       <td>${event.verification || '-'}</td>
     </tr>`)
+    .join('');
+
+  const webhookCards = snapshot.webhooks
+    .map(
+      (event) => `<div class="mobile-item-card">
+        <div class="mobile-item-title">${event.topic || '-'}</div>
+        <div class="mobile-item-grid">
+          <div><strong>Recebido em</strong><span>${event.receivedAt || '-'}</span></div>
+          <div><strong>Ação</strong><span>${event.action || '-'}</span></div>
+          <div><strong>Recurso</strong><span>${event.resourceId || '-'}</span></div>
+          <div><strong>Validação</strong><span>${event.verification || '-'}</span></div>
+        </div>
+      </div>`
+    )
     .join('');
 
   return `<!DOCTYPE html>
@@ -656,20 +687,36 @@ const buildDashboardHtml = (snapshot, user) => {
     h1, h2 { margin: 0 0 12px 0; }
     .meta { color: #94a3b8; margin-bottom: 20px; }
     .card { background: #111827; border: 1px solid #334155; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+    .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { border-bottom: 1px solid #1e293b; padding: 10px; text-align: left; }
     th { color: #7dd3fc; font-weight: 600; }
     tr:hover { background: #0f172a; }
     .small { color: #94a3b8; font-size: 12px; }
     .header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+    .header-right { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
     .logout { border: 0; background: #0ea5e9; color: #082f49; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600; }
-    .nav-btn { border: 1px solid #334155; background: transparent; color: #cbd5e1; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600; text-decoration: none; margin-right: 8px; }
+    .nav-btn { border: 1px solid #334155; background: transparent; color: #cbd5e1; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 600; text-decoration: none; }
+    .mobile-list { display: none; }
+    .mobile-item-card { border: 1px solid #334155; background: #0f172a; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+    .mobile-item-title { color: #7dd3fc; font-weight: 700; margin-bottom: 8px; word-break: break-word; }
+    .mobile-item-grid { display: grid; grid-template-columns: 1fr; gap: 8px; font-size: 13px; }
+    .mobile-item-grid div { display: grid; gap: 2px; }
+    .mobile-item-grid strong { color: #94a3b8; font-size: 12px; font-weight: 600; }
+    .mobile-item-grid span { color: #e2e8f0; word-break: break-word; }
+    @media (max-width: 900px) {
+      body { padding: 14px; }
+      .header { flex-direction: column; align-items: flex-start; }
+      .header-right { width: 100%; justify-content: flex-start; }
+      .desktop-table { display: none; }
+      .mobile-list { display: block; }
+    }
   </style>
 </head>
 <body>
   <div class="header">
     <h1>Painel Interno de Pagamentos</h1>
-    <div>
+    <div class="header-right">
       <span class="small">Usuário: ${user?.username || '-'} (${user?.role || '-'})</span>
       ${user?.role === 'admin' ? '<a class="nav-btn" href="/internal/plans">Gerenciar planos</a>' : ''}
       <button class="logout" id="logout-btn" type="button">Sair</button>
@@ -679,41 +726,51 @@ const buildDashboardHtml = (snapshot, user) => {
 
   <div class="card">
     <h2>Status de pagamentos</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Payment ID</th>
-          <th>Plano</th>
-          <th>Tópico</th>
-          <th>Status</th>
-          <th>Status detail</th>
-          <th>Valor</th>
-          <th>Sync CRM</th>
-          <th>Atualizado</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${paymentRows || '<tr><td colspan="8">Sem pagamentos registrados</td></tr>'}
-      </tbody>
-    </table>
+    <div class="desktop-table table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Payment ID</th>
+            <th>Plano</th>
+            <th>Tópico</th>
+            <th>Status</th>
+            <th>Status detail</th>
+            <th>Valor</th>
+            <th>Sync CRM</th>
+            <th>Atualizado</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${paymentRows || '<tr><td colspan="8">Sem pagamentos registrados</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+    <div class="mobile-list">
+      ${paymentCards || '<div class="mobile-item-card">Sem pagamentos registrados</div>'}
+    </div>
   </div>
 
   <div class="card">
     <h2>Eventos de webhook</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Recebido em</th>
-          <th>Tópico</th>
-          <th>Ação</th>
-          <th>Recurso</th>
-          <th>Validação</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${webhookRows || '<tr><td colspan="5">Sem webhooks registrados</td></tr>'}
-      </tbody>
-    </table>
+    <div class="desktop-table table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Recebido em</th>
+            <th>Tópico</th>
+            <th>Ação</th>
+            <th>Recurso</th>
+            <th>Validação</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${webhookRows || '<tr><td colspan="5">Sem webhooks registrados</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+    <div class="mobile-list">
+      ${webhookCards || '<div class="mobile-item-card">Sem webhooks registrados</div>'}
+    </div>
   </div>
 
   <div class="small">Acesso por sessão HttpOnly e perfil interno. Próxima etapa: integrar SSO/JWT corporativo.</div>
@@ -815,6 +872,26 @@ const buildPlansAdminHtml = (plans, user) => {
     )
     .join('');
 
+  const planCards = plans
+    .map(
+      (plan) => `<div class="mobile-item-card">
+        <div class="mobile-item-title">${plan.name} (${plan.id})</div>
+        <div class="mobile-item-grid">
+          <div><strong>Segmento</strong><span>${plan.segment || '-'}</span></div>
+          <div><strong>Ciclo (meses)</strong><span>${plan.billingCycleMonths || 1}</span></div>
+          <div><strong>Ordem</strong><span>${plan.displayOrder || 99}</span></div>
+          <div><strong>Valor</strong><span>R$ ${plan.unitPrice}</span></div>
+          <div><strong>Botão</strong><span>${plan.buttonText || 'Assinar'}</span></div>
+          <div><strong>Status</strong><span>${plan.active === false ? 'Inativo' : 'Ativo'}</span></div>
+        </div>
+        <div class="mobile-actions">
+          <button type="button" class="btn" onclick="editPlan('${plan.id}')">Editar</button>
+          <button type="button" class="btn danger" onclick="deletePlan('${plan.id}')">Excluir</button>
+        </div>
+      </div>`
+    )
+    .join('');
+
   const plansJson = JSON.stringify(plans || []);
 
   return `<!DOCTYPE html>
@@ -828,7 +905,9 @@ const buildPlansAdminHtml = (plans, user) => {
     h1, h2 { margin: 0 0 12px 0; }
     .meta { color: #94a3b8; margin-bottom: 20px; }
     .header { display: flex; justify-content: space-between; gap: 12px; margin-bottom: 16px; align-items: center; }
+    .header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
     .card { background: #111827; border: 1px solid #334155; border-radius: 10px; padding: 16px; margin-bottom: 20px; }
+    .table-wrap { overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { border-bottom: 1px solid #1e293b; padding: 10px; text-align: left; }
     th { color: #7dd3fc; font-weight: 600; }
@@ -838,6 +917,22 @@ const buildPlansAdminHtml = (plans, user) => {
     .btn.secondary { background: #334155; color: #e2e8f0; }
     .btn.danger { background: #ef4444; color: #fff; }
     .small { color: #94a3b8; font-size: 12px; }
+    .mobile-list { display: none; }
+    .mobile-item-card { border: 1px solid #334155; background: #0f172a; border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+    .mobile-item-title { color: #7dd3fc; font-weight: 700; margin-bottom: 8px; word-break: break-word; }
+    .mobile-item-grid { display: grid; grid-template-columns: 1fr; gap: 8px; font-size: 13px; margin-bottom: 10px; }
+    .mobile-item-grid div { display: grid; gap: 2px; }
+    .mobile-item-grid strong { color: #94a3b8; font-size: 12px; font-weight: 600; }
+    .mobile-item-grid span { color: #e2e8f0; word-break: break-word; }
+    .mobile-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    @media (max-width: 900px) {
+      body { padding: 14px; }
+      .header { flex-direction: column; align-items: flex-start; }
+      .header-actions { width: 100%; }
+      .grid { grid-template-columns: 1fr; }
+      .desktop-table { display: none; }
+      .mobile-list { display: block; }
+    }
   </style>
 </head>
 <body>
@@ -846,7 +941,7 @@ const buildPlansAdminHtml = (plans, user) => {
       <h1>Gerenciar Planos do SaaS</h1>
       <div class="meta">Usuário: ${user?.username || '-'} (${user?.role || '-'})</div>
     </div>
-    <div>
+    <div class="header-actions">
       <a class="btn secondary" href="/internal/payments">Voltar ao painel</a>
       <button class="btn" id="logout-btn" type="button">Sair</button>
     </div>
@@ -903,24 +998,29 @@ const buildPlansAdminHtml = (plans, user) => {
 
   <div class="card">
     <h2>Planos cadastrados</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Nome</th>
-          <th>Segmento</th>
-          <th>Ciclo (meses)</th>
-          <th>Ordem</th>
-          <th>Valor</th>
-          <th>Botão</th>
-          <th>Status</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows || '<tr><td colspan="9">Nenhum plano cadastrado.</td></tr>'}
-      </tbody>
-    </table>
+    <div class="desktop-table table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Segmento</th>
+            <th>Ciclo (meses)</th>
+            <th>Ordem</th>
+            <th>Valor</th>
+            <th>Botão</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows || '<tr><td colspan="9">Nenhum plano cadastrado.</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+    <div class="mobile-list">
+      ${planCards || '<div class="mobile-item-card">Nenhum plano cadastrado.</div>'}
+    </div>
   </div>
 
   <script>
